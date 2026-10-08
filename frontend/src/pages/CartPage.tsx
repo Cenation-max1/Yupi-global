@@ -1,4 +1,6 @@
-import { ArrowLeft, ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useCart } from '../cart/CartContext'
 import type { CartItem } from '../cart/CartContext'
@@ -63,6 +65,52 @@ function CartRow({ item }: { item: CartItem }) {
 
 export default function CartPage() {
   const { items, itemCount, subtotal, clearCart } = useCart()
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [confirmation, setConfirmation] = useState<{ orderNumber: string; total: string } | null>(null)
+
+  async function submitOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (submitting) return
+
+    const values = new FormData(event.currentTarget)
+    setSubmitting(true)
+    setError('')
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: values.get('customer_name'),
+          phone: values.get('phone'),
+          email: values.get('email'),
+          city: values.get('city'),
+          neighborhood: values.get('neighborhood'),
+          delivery_landmark: values.get('delivery_landmark'),
+          marketing_consent: values.get('marketing_consent') === 'on',
+          items: items.map(({ kind, id, quantity }) => ({ kind, id, quantity })),
+        }),
+      })
+      if (response.status === 429) {
+        setError('Le nombre de commandes autorisé est atteint. Réessayez plus tard.')
+        return
+      }
+      const result: { order?: { order_number: string; total: string }; error?: string } = await response.json()
+      if (!response.ok || !result.order) {
+        setError(result.error || 'La commande n’a pas pu être enregistrée. Vérifiez les informations et réessayez.')
+        return
+      }
+      clearCart()
+      setConfirmation({
+        orderNumber: result.order.order_number,
+        total: result.order.total,
+      })
+    } catch {
+      setError('Le service est momentanément indisponible. Votre panier a été conservé ; réessayez plus tard.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="store-page">
@@ -71,14 +119,25 @@ export default function CartPage() {
         <div className="cart-title-row">
           <div>
             <p className="eyebrow"><span /> Votre sélection</p>
-            <h1>Mon panier<span className="cart-title-count">{itemCount}</span></h1>
+            <h1>{confirmation ? 'Commande confirmée' : 'Mon panier'}{!confirmation && <span className="cart-title-count">{itemCount}</span>}</h1>
           </div>
-          {items.length > 0 && (
+          {!confirmation && items.length > 0 && (
             <button className="cart-clear-button" type="button" onClick={clearCart}>Vider le panier</button>
           )}
         </div>
 
-        {items.length === 0 ? (
+        {confirmation ? (
+          <section className="cart-empty checkout-confirmation" role="status">
+            <span className="cart-empty-icon"><Check size={27} aria-hidden="true" /></span>
+            <h2>Merci pour votre commande.</h2>
+            <p>Notre équipe vous contactera pour confirmer la livraison et le paiement à la réception.</p>
+            <p className="order-reference">Référence : <strong>{confirmation.orderNumber}</strong></p>
+            <p className="order-reference">Total confirmé : <strong>{formatAmount(Number(confirmation.total))}</strong></p>
+            <Link className="button button-primary" to="/boutique">
+              Continuer mes achats <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+          </section>
+        ) : items.length === 0 ? (
           <section className="cart-empty">
             <span className="cart-empty-icon"><ShoppingBag size={27} aria-hidden="true" /></span>
             <h2>Votre panier est encore vide.</h2>
@@ -101,10 +160,43 @@ export default function CartPage() {
               <div className="summary-row"><span>Articles</span><span>{itemCount}</span></div>
               <div className="summary-row summary-total"><strong>Sous-total</strong><strong>{formatAmount(subtotal)}</strong></div>
               <p className="summary-delivery">Paiement à la livraison.</p>
-              <button className="button button-primary checkout-next" type="button" disabled>
-                Finaliser la commande <ArrowRight size={17} aria-hidden="true" />
-              </button>
-              <p className="checkout-note">Le bon de commande sera disponible à l’étape suivante.</p>
+              <form className="checkout-form" onSubmit={submitOrder}>
+                <label>
+                  Nom complet
+                  <input name="customer_name" type="text" autoComplete="name" maxLength={160} required />
+                </label>
+                <label>
+                  Téléphone
+                  <input name="phone" type="tel" autoComplete="tel" maxLength={30} required />
+                </label>
+                <label>
+                  E-mail <span>(facultatif)</span>
+                  <input name="email" type="email" autoComplete="email" maxLength={255} />
+                </label>
+                <label>
+                  Ville
+                  <input name="city" type="text" autoComplete="address-level2" maxLength={120} required />
+                </label>
+                <label>
+                  Quartier
+                  <input name="neighborhood" type="text" maxLength={120} required />
+                </label>
+                <label>
+                  Repère de livraison
+                  <textarea name="delivery_landmark" rows={2} maxLength={200} required />
+                </label>
+                <label className="checkout-consent">
+                  <input name="marketing_consent" type="checkbox" />
+                  <span>J’accepte de recevoir des informations et offres de Yupi Global.</span>
+                </label>
+                <button className="button button-primary checkout-next" type="submit" disabled={submitting}>
+                  {submitting && <LoaderCircle className="loading-icon" size={17} aria-hidden="true" />}
+                  {submitting ? 'Envoi en cours…' : 'Confirmer la commande'}
+                  {!submitting && <ArrowRight size={17} aria-hidden="true" />}
+                </button>
+                {error && <p className="form-message form-message-error" role="alert">{error}</p>}
+              </form>
+              <p className="checkout-note">Le paiement s’effectue à la livraison. Le total est recalculé à partir du catalogue.</p>
             </aside>
           </div>
         )}

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowDownRight,
   ArrowRight,
   Flower2,
   HeartHandshake,
   Leaf,
+  LoaderCircle,
   Menu,
   PackageCheck,
   ShieldCheck,
@@ -12,7 +13,6 @@ import {
   Truck,
   X,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import TestimonialsPreview from './components/TestimonialsPreview'
 
@@ -23,46 +23,26 @@ const navigation = [
   { label: 'Avis clients', href: '#temoignages' },
 ]
 
-const kitFamilies: {
-  name: string
+interface CatalogKit {
+  id: number
   slug: string
-  number: string
-  description: string
-  icon: LucideIcon
-  tone: string
-}[] = [
-  {
-    name: 'Myomes',
-    slug: 'kit-myomes',
-    number: '01',
-    description: 'Une famille de produits réunis dans un kit dédié.',
-    icon: Flower2,
-    tone: 'peach',
-  },
-  {
-    name: 'Fertilité',
-    slug: 'kit-fertilite',
-    number: '02',
-    description: 'Plusieurs produits sélectionnés dans un même kit.',
-    icon: HeartHandshake,
-    tone: 'green',
-  },
-  {
-    name: 'Kystes',
-    slug: 'kit-kystes',
-    number: '03',
-    description: 'Une sélection à découvrir dans son détail produit.',
-    icon: Sparkles,
-    tone: 'yellow',
-  },
-  {
-    name: 'Détox',
-    slug: 'kit-detox',
-    number: '04',
-    description: 'Des produits rassemblés au sein d’un même kit.',
-    icon: Leaf,
-    tone: 'blue',
-  },
+  name: string
+  description: string | null
+  image_url: string | null
+  category: { name: string }
+  items: { quantity: number }[]
+}
+
+type KitCatalogState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'ready'; kits: CatalogKit[] }
+
+const kitArt = [
+  { icon: Flower2, tone: 'peach' },
+  { icon: HeartHandshake, tone: 'green' },
+  { icon: Sparkles, tone: 'yellow' },
+  { icon: Leaf, tone: 'blue' },
 ]
 
 const commitments = [
@@ -102,6 +82,29 @@ function Brand({ light = false }: { light?: boolean }) {
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [kitCatalog, setKitCatalog] = useState<KitCatalogState>({ status: 'loading' })
+  const [catalogAttempt, setCatalogAttempt] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadKits() {
+      setKitCatalog({ status: 'loading' })
+      try {
+        const response = await fetch('/api/catalog/kits', { signal: controller.signal })
+        if (!response.ok) throw new Error('Catalog request failed')
+        const result: { items: CatalogKit[] } = await response.json()
+        if (!controller.signal.aborted) {
+          setKitCatalog({ status: 'ready', kits: result.items })
+        }
+      } catch {
+        if (!controller.signal.aborted) setKitCatalog({ status: 'error' })
+      }
+    }
+
+    void loadKits()
+    return () => controller.abort()
+  }, [catalogAttempt])
 
   function closeMenu() {
     setMenuOpen(false)
@@ -210,28 +213,57 @@ export default function App() {
               Explorez les familles de kits imaginées autour des besoins que vous nous avez partagés.
             </p>
           </div>
-          <div className="kit-grid">
-            {kitFamilies.map(({ name, slug, number, description, icon: Icon, tone }) => (
-              <article className="kit-card" key={name}>
-                <div className={`kit-art kit-art-${tone}`}>
-                  <span className="kit-number">{number}</span>
-                  <Icon className="kit-icon" size={38} strokeWidth={1.5} aria-hidden="true" />
-                  <span className="kit-label">KIT YUPI</span>
-                </div>
-                <div className="kit-copy">
-                  <h3>{name}</h3>
-                  <p>{description}</p>
-                  <span className="kit-type">Famille de produits</span>
-                  <Link className="kit-detail-link" to={`/kits/${slug}`}>
-                    Voir la fiche <ArrowRight size={15} aria-hidden="true" />
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
+          {kitCatalog.status === 'loading' && (
+            <div className="kit-catalog-state" role="status">
+              <LoaderCircle className="loading-icon" size={24} aria-hidden="true" />
+              <p>Chargement des kits disponibles…</p>
+            </div>
+          )}
+          {kitCatalog.status === 'error' && (
+            <div className="kit-catalog-state kit-catalog-error" role="alert">
+              <p>Les kits n’ont pas pu être chargés. Vérifiez votre connexion et réessayez.</p>
+              <button className="text-link" type="button" onClick={() => setCatalogAttempt((attempt) => attempt + 1)}>
+                Réessayer <ArrowRight size={16} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+          {kitCatalog.status === 'ready' && kitCatalog.kits.length === 0 && (
+            <div className="kit-catalog-state">
+              <p>Les kits seront affichés ici dès leur publication par notre équipe.</p>
+              <Link className="kit-detail-link" to="/boutique">
+                Voir la boutique <ArrowRight size={15} aria-hidden="true" />
+              </Link>
+            </div>
+          )}
+          {kitCatalog.status === 'ready' && kitCatalog.kits.length > 0 && (
+            <div className="kit-grid">
+              {kitCatalog.kits.map((kit, index) => {
+                const { icon: Icon, tone } = kitArt[index % kitArt.length]
+                return (
+                  <article className="kit-card" key={kit.id}>
+                    <div className={`kit-art kit-art-${tone}${kit.image_url ? ' kit-art-photo' : ''}`}>
+                      {kit.image_url
+                        ? <img className="kit-art-image" src={kit.image_url} alt="" loading="lazy" />
+                        : <Icon className="kit-icon" size={38} strokeWidth={1.5} aria-hidden="true" />}
+                      <span className="kit-number">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="kit-label">KIT YUPI</span>
+                    </div>
+                    <div className="kit-copy">
+                      <h3>{kit.name}</h3>
+                      <p>{kit.description || `${kit.items.length} produit${kit.items.length === 1 ? '' : 's'} dans ce kit.`}</p>
+                      <span className="kit-type">{kit.category.name}</span>
+                      <Link className="kit-detail-link" to={`/kits/${kit.slug}`}>
+                        Voir la fiche <ArrowRight size={15} aria-hidden="true" />
+                      </Link>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
           <p className="catalog-note">
             <ShieldCheck size={17} aria-hidden="true" />
-            Les informations détaillées seront présentées pour chaque produit et chaque composition de kit.
+            Les informations présentées proviennent du catalogue publié par notre équipe.
           </p>
         </section>
 

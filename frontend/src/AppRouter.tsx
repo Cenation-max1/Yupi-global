@@ -1,6 +1,8 @@
 import { useLayoutEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import HomePage from './App'
+import AdminCatalogPage from './pages/AdminCatalogPage'
+import AdminOrdersPage from './pages/AdminOrdersPage'
 import CartPage from './pages/CartPage'
 import CatalogDetailPage, { NotFoundPage } from './pages/CatalogDetailPage'
 import ShopPage from './pages/ShopPage'
@@ -37,6 +39,8 @@ export default function AppRouter() {
         <Route path="/" element={<HomePage />} />
         <Route path="/boutique" element={<ShopPage />} />
         <Route path="/panier" element={<CartPage />} />
+        <Route path="/admin/catalog" element={<AdminCatalogPage />} />
+        <Route path="/admin/orders" element={<AdminOrdersPage />} />
         <Route path="/products/:slug" element={<CatalogDetailPage kind="product" />} />
         <Route path="/kits/:slug" element={<CatalogDetailPage kind="kit" />} />
         <Route path="*" element={<NotFoundPage />} />

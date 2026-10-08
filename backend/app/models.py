@@ -190,6 +190,7 @@ class OrderItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("product.id"))
     kit_id = db.Column(db.Integer, db.ForeignKey("kit.id"))
     item_name = db.Column(db.String(180), nullable=False)
+    image_url = db.Column(db.String(500))
     quantity = db.Column(db.Integer, nullable=False)
     unit_price = db.Column(db.Numeric(10, 2), nullable=False)
     discount_amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)

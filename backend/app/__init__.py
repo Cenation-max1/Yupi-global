@@ -19,6 +19,8 @@ def create_app(test_config=None):
             "DATABASE_URL", "sqlite:///yupi.sqlite"
         ),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        UPLOAD_FOLDER=os.path.join(app.instance_path, "uploads"),
+        MAX_CONTENT_LENGTH=6 * 1024 * 1024,
     )
     if test_config:
         app.config.update(test_config)
@@ -35,15 +37,19 @@ def create_app(test_config=None):
     from . import models
     from .auth import auth
     from .catalog import admin_catalog, public_catalog
+    from .orders import orders
     from .routes import api
     from .social import admin_social, public_social
+    from .uploads import uploads as image_uploads
 
     app.register_blueprint(api)
     app.register_blueprint(auth)
     app.register_blueprint(public_catalog)
     app.register_blueprint(admin_catalog)
+    app.register_blueprint(orders)
     app.register_blueprint(public_social)
     app.register_blueprint(admin_social)
+    app.register_blueprint(image_uploads)
 
     @app.cli.command("create-super-admin")
     @click.option("--email", prompt=True)
